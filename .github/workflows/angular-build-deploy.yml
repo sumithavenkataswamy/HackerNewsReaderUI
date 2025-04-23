@@ -1,0 +1,168 @@
+name: Build, Test, and Deploy Angular App
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build and Test Angular Application
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Step 2: Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18.x'
+
+      # Step 3: Install dependencies
+      - name: Install Dependencies
+        run: npm install
+
+      # Step 4: Run tests and generate coverage report
+      - name: Run Tests with Coverage
+        run: npm test -- --code-coverage --watch=false
+
+      # Step 5: Build the Angular application
+      - name: Build Angular Application
+        run: npm run build -- --configuration=production
+
+  build-and-publish:
+    name: Build and Publish Docker Image
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    outputs:
+      build_version: ${{ steps.build_version.outputs.build_version }}
+
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Step 2: Generate a unique build version
+      - name: Generate Build Version
+        id: build_version
+        run: |
+          BUILD_VERSION=$(date +%Y%m%d%H%M%S)
+          echo "BUILD_VERSION=$BUILD_VERSION" >> $GITHUB_ENV
+          echo "build_version=$BUILD_VERSION" >> $GITHUB_OUTPUT
+
+      # Step 3: Log in to GitHub Container Registry
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      # Step 4: Build Docker image
+      - name: Build Docker Image
+        run: |
+          docker build \
+          -f Dockerfile \
+          -t ghcr.io/${{ github.actor }}/hacker-news-reader-ui:${{ env.BUILD_VERSION }} \
+          -t ghcr.io/${{ github.actor }}/hacker-news-reader-ui:latest \
+          .
+
+      # Step 5: Push Docker images
+      - name: Push Docker Images
+        run: |
+          docker push ghcr.io/${{ github.actor }}/hacker-news-reader-ui:${{ env.BUILD_VERSION }}
+          docker push ghcr.io/${{ github.actor }}/hacker-news-reader-ui:latest
+
+  deploy-dev:
+    name: Deploy to Dev Environment
+    runs-on: ubuntu-latest
+    needs: build-and-publish
+    if: github.ref_name == 'develop'
+    environment: dev
+
+    steps:
+      # Step 1: Display Environment Info
+      - name: Display Environment Info
+        run: echo "Deploying to DEV environment with build version ${{ needs.build-and-publish.outputs.build_version }}"
+
+      # Step 2: Log in to Azure
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Step 3: Set Azure Subscription
+      - name: Set Azure Subscription
+        run: az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION }}
+
+      # Step 4: Update Azure Container App
+      - name: Update Azure Container App
+        run: |
+          az containerapp update \
+            --name ${{ secrets.CONTAINER_APP_UI }} \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --image ghcr.io/${{ github.actor }}/hacker-news-reader-ui:${{ needs.build-and-publish.outputs.build_version }} \
+            --set registries="ghcr.io=${{ secrets.GHCR_USERNAME }}=${{ secrets.TOKEN }}"
+
+  deploy-test:
+    name: Deploy to Test Environment
+    runs-on: ubuntu-latest
+    needs: build-and-publish
+    if: github.ref_name == 'main'
+    environment: test
+
+    steps:
+      # Step 1: Display Environment Info
+      - name: Display Environment Info
+        run: echo "Deploying to TEST environment with build version ${{ needs.build-and-publish.outputs.build_version }}"
+
+      # Step 2: Log in to Azure
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Step 3: Set Azure Subscription
+      - name: Set Azure Subscription
+        run: az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION }}
+
+      # Step 4: Update Azure Container App
+      - name: Update Azure Container App
+        run: |
+          az containerapp update \
+            --name ${{ secrets.CONTAINER_APP_UI }} \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --image ghcr.io/${{ github.actor }}/hacker-news-reader-ui:${{ needs.build-and-publish.outputs.build_version }} \
+            --set registries="ghcr.io=${{ secrets.GHCR_USERNAME }}=${{ secrets.TOKEN }}"
+
+  deploy-prod:
+    name: Deploy to Production Environment
+    runs-on: ubuntu-latest
+    needs: deploy-test
+    if: github.ref_name == 'main'
+    environment: prod
+
+    steps:
+      # Step 1: Display Environment Info
+      - name: Display Environment Info
+        run: echo "Deploying to PROD environment with build version ${{ needs.build-and-publish.outputs.build_version }}"
+
+      # Step 2: Log in to Azure
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Step 3: Set Azure Subscription
+      - name: Set Azure Subscription
+        run: az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION }}
+
+      # Step 4: Update Azure Container App
+      - name: Update Azure Container App
+        run: |
+          az containerapp update \
+            --name ${{ secrets.CONTAINER_APP_UI }} \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --image ghcr.io/${{ github.actor }}/hacker-news-reader-ui:${{ needs.build-and-publish.outputs.build_version }} \
+            --set registries="ghcr.io=${{ secrets.GHCR_USERNAME }}=${{ secrets.TOKEN }}"
