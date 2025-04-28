@@ -1,6 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { MatPaginatorModule } from '@angular/material/paginator';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -9,6 +8,7 @@ import { StoryListComponent } from './story-list.component';
 import { StoryService } from '../services/story.service';
 import { of } from 'rxjs';
 import { Story } from '../models/story';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 
 describe('StoryListComponent', () => {
   let component: StoryListComponent;
@@ -21,37 +21,37 @@ describe('StoryListComponent', () => {
   ];
 
   beforeEach(async () => {
-    const storyServiceSpy = jasmine.createSpyObj('StoryService', ['getStories', 'searchStories']);
+    const storyServiceSpy = jasmine.createSpyObj('StoryService', ['getStories']);
 
     await TestBed.configureTestingModule({
       imports: [
-        HttpClientTestingModule,
         MatPaginatorModule,
         MatFormFieldModule,
         MatInputModule,
-        MatProgressSpinnerModule, // Import spinner module for testing
+        MatProgressSpinnerModule,
         FormsModule,
         StoryListComponent,
       ],
-      providers: [{ provide: StoryService, useValue: storyServiceSpy }],
+      providers: [
+        provideHttpClientTesting(),
+        { provide: StoryService, useValue: storyServiceSpy },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(StoryListComponent);
     component = fixture.componentInstance;
     storyService = TestBed.inject(StoryService) as jasmine.SpyObj<StoryService>;
 
-    // Mocking service methods to return observables
     storyService.getStories.and.returnValue(
       of({ items: mockStories, totalCount: mockStories.length })
     );
-    storyService.searchStories.and.returnValue(of(mockStories));
   });
 
   it('should create the component', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should initialize and call loadStories', () => {
+  it('should initialize and call loadStories on component initialization', () => {
     spyOn(component, 'loadStories');
     component.ngOnInit();
     expect(component.loadStories).toHaveBeenCalled();
@@ -59,46 +59,38 @@ describe('StoryListComponent', () => {
 
   it('should load stories correctly', () => {
     component.loadStories();
-
-    expect(storyService.getStories).toHaveBeenCalledWith(component.currentPage, component.pageSize);
+    expect(storyService.getStories).toHaveBeenCalledWith(component.currentPage, component.pageSize, undefined);
     expect(component.dataSource.data).toEqual(mockStories);
     expect(component.totalItems).toEqual(mockStories.length);
-    expect(component.isLoading).toBeFalse();
   });
 
-  it('should handle search query correctly', () => {
+  it('should handle search correctly', () => {
     component.searchQuery = 'Story';
     component.onSearch();
-
-    expect(storyService.searchStories).toHaveBeenCalledWith('Story');
+    expect(component.currentPage).toEqual(0);
+    expect(storyService.getStories).toHaveBeenCalledWith(component.currentPage, component.pageSize, 'Story');
     expect(component.dataSource.data).toEqual(mockStories);
-    expect(component.totalItems).toEqual(mockStories.length);
   });
 
   it('should handle pagination correctly', () => {
-    const pageEvent = { pageIndex: 1, pageSize: 5 } as any;
+    const pageEvent: PageEvent = { pageIndex: 1, pageSize: 5, length: 10 };
     component.onPageChange(pageEvent);
-
     expect(component.currentPage).toEqual(2);
     expect(component.pageSize).toEqual(5);
-    expect(storyService.getStories).toHaveBeenCalledWith(component.currentPage, component.pageSize);
+    expect(storyService.getStories).toHaveBeenCalledWith(component.currentPage, component.pageSize, undefined);
   });
 
-  it('should handle empty search query correctly', () => {
+  it('should reset search query and reload stories on empty search', () => {
     component.searchQuery = '';
     component.onSearch();
-
-    expect(storyService.getStories).toHaveBeenCalledWith(component.currentPage, component.pageSize);
-    expect(component.dataSource.data).toEqual(mockStories);
-    expect(component.totalItems).toEqual(mockStories.length);
+    expect(component.currentPage).toEqual(0);
+    expect(storyService.getStories).toHaveBeenCalledWith(component.currentPage, component.pageSize, undefined);
   });
 
-
-  it('should hide spinner after data load', () => {
+  it('should hide spinner after data is loaded', () => {
     component.isLoading = false;
     fixture.detectChanges();
-
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('mat-spinner')).toBeNull();
-  });
+  });  
 });

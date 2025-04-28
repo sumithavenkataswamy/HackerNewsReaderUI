@@ -1,6 +1,7 @@
 .story-container {
   padding: 20px;
   font-family: Arial, sans-serif;
+  position: relative;
 
   .title {
     font-size: 24px;
@@ -23,6 +24,13 @@
         vertical-align: middle;
       }
     }
+  }
+
+  .loader {
+    margin-top: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
   }
 
   .stories-table {
@@ -60,34 +68,4 @@
     display: flex;
     justify-content: center;
   }
-  .story-container {
-    padding: 20px;
-    font-family: Arial, sans-serif;
-    position: relative; // Ensures the loader is positioned relative to this container
-  
-    .loader {
-      position: absolute; // Position it absolutely within the container
-      top: 50%; // Vertically center
-      left: 50%; // Horizontally center
-      transform: translate(-50%, -50%); // Adjust for spinner dimensions
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 10; // Ensure it appears above other content
-    }
-  
-    table {
-      width: 100%;
-    }
-  
-    .stories-table {
-      margin: 20px 0;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-  
-    mat-paginator {
-      margin-top: 20px;
-    }
-  }
-  
 }

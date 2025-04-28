@@ -1,23 +1,24 @@
 import { Component, OnInit } from '@angular/core';
 import { MatTableDataSource } from '@angular/material/table';
 import { StoryService } from '../services/story.service';
-import { Story} from '../models/story';
-import { BrowserModule } from '@angular/platform-browser';
-import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { Story } from '../models/story';
+import { PageEvent } from '@angular/material/paginator';
 import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTableModule } from '@angular/material/table';
-import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatPaginatorModule } from '@angular/material/paginator';
 import { CommonModule } from '@angular/common';
-import { MatProgressSpinnerModule, MatSpinner } from '@angular/material/progress-spinner';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { catchError, finalize, tap } from 'rxjs/operators';
+import { of } from 'rxjs';
 
 @Component({
   selector: 'app-story-list',
   standalone: true,
-  imports:[
+  imports: [
     CommonModule,
     FormsModule,
     MatFormFieldModule,
@@ -26,7 +27,7 @@ import { MatProgressSpinnerModule, MatSpinner } from '@angular/material/progress
     MatIconModule,
     MatTableModule,
     MatPaginatorModule,
-    MatProgressSpinnerModule
+    MatProgressSpinnerModule,
   ],
   templateUrl: './story-list.component.html',
   styleUrls: ['./story-list.component.scss'],
@@ -36,7 +37,7 @@ export class StoryListComponent implements OnInit {
   dataSource = new MatTableDataSource<Story>();
   totalItems: number = 0;
   pageSize = 10;
-  currentPage = 1;
+  currentPage = 0;
   searchQuery = '';
   isLoading = false;
 
@@ -47,35 +48,28 @@ export class StoryListComponent implements OnInit {
   }
 
   loadStories(): void {
-    this.isLoading = true; 
-    if (this.searchQuery.trim()) {
-      this.storyService.searchStories(this.searchQuery).subscribe(
-        (stories) => {
-          this.dataSource.data = stories;
-          this.totalItems = stories.length;
-          this.isLoading = false; 
-        },
-        (error) => {
-          console.error('Error loading stories:', error);
-          this.isLoading = false; 
-        }
-      );
-    } else {
-      this.storyService.getStories(this.currentPage, this.pageSize).subscribe(
-        (response) => {
-          this.dataSource.data = response.items;
+    this.isLoading = true;
+
+    this.storyService
+      .getStories(this.currentPage, this.pageSize, this.searchQuery.trim() ? this.searchQuery : undefined)
+      .pipe(
+        tap((response) => {
+          this.dataSource.data = response.items.filter((story) => story.url);
           this.totalItems = response.totalCount;
-          this.isLoading = false;
-        },
-        (error) => {
+        }),
+        catchError((error) => {
           console.error('Error loading stories:', error);
+          return of(null);
+        }),
+        finalize(() => {
           this.isLoading = false;
-        }
-      );
-    }
+        })
+      )
+      .subscribe(); 
   }
 
   onSearch(): void {
+    this.currentPage = 0;
     this.loadStories();
   }
 

@@ -1,4 +1,4 @@
 export interface Story {
-    title: string;
+    title: string | null;
     url: string | null;
   }
